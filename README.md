@@ -52,7 +52,6 @@
 Если вы хотите доработать проект, следуйте инструкции:
 
 1. Клонирование репозитория
-```bash
 git clone [https://github.com/ВАШ_НИК/MightyMax.git](https://github.com/ВАШ_НИК/MightyMax.git)
 cd MightyMax
 
