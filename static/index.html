@@ -1,0 +1,457 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MightyMax Compressor</title>
+    <style>
+        :root {
+            --primary: #6c5ce7;
+            --primary-hover: #5b4cc4;
+            --bg: #dfe6e9;
+            --surface: #ffffff;
+            --text: #2d3436;
+            --danger: #e74c3c;
+            --danger-hover: #c0392b;
+        }
+        body {
+            font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            background-color: var(--bg);
+            color: var(--text);
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-height: 100vh;
+        }
+        .container {
+            width: 100%;
+            max-width: 800px;
+            text-align: center;
+        }
+
+        /* Header & Exit Button */
+        .header-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            width: 100%;
+            margin-bottom: 10px;
+        }
+        h1 { margin: 0; color: #2d3436; font-size: 2.2rem; }
+        .btn-exit {
+            background: var(--danger);
+            color: white;
+            border: none;
+            padding: 8px 15px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.9rem;
+            transition: background 0.2s;
+            font-weight: 600;
+        }
+        .btn-exit:hover { background: var(--danger-hover); }
+
+        p.subtitle { color: #636e72; margin-bottom: 1.5rem; margin-top: 0.5rem; }
+
+        /* Settings Zone */
+        .settings-zone {
+            background: var(--surface);
+            padding: 25px;
+            border-radius: 12px;
+            margin-bottom: 20px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        .settings-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 20px;
+            flex-wrap: wrap;
+        }
+
+        .control-group {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-start;
+            flex: 1;
+            min-width: 200px;
+        }
+        .control-group label {
+            font-size: 0.9rem;
+            font-weight: 600;
+            margin-bottom: 8px;
+            color: #2d3436;
+        }
+
+        /* Range Slider */
+        .range-container {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            width: 100%;
+        }
+        input[type=range] { flex: 1; cursor: pointer; accent-color: var(--primary); }
+        .quality-val { font-weight: bold; color: var(--primary); min-width: 40px; text-align: right; }
+
+        /* Select Box */
+        select {
+            width: 100%;
+            padding: 10px;
+            border: 1px solid #b2bec3;
+            border-radius: 6px;
+            font-size: 0.95rem;
+            background-color: white;
+            cursor: pointer;
+            color: var(--text);
+        }
+        select:focus { outline: 2px solid var(--primary); border-color: transparent; }
+
+        /* Drop Zone */
+        .drop-zone {
+            background: var(--surface);
+            border: 2px dashed var(--primary);
+            border-radius: 12px;
+            padding: 40px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            position: relative;
+        }
+        .drop-zone.dragover { background-color: #e3e0ff; transform: scale(1.02); }
+        .drop-zone-text { font-size: 1.2rem; color: #555; pointer-events: none; }
+        .drop-zone input {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            opacity: 0; cursor: pointer;
+        }
+
+        /* File List */
+        .file-list { margin-top: 30px; list-style: none; padding: 0; width: 100%; }
+        .file-item {
+            background: var(--surface);
+            margin-bottom: 10px;
+            padding: 15px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            animation: slideIn 0.3s ease;
+        }
+        @keyframes slideIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+
+        .file-info { display: flex; align-items: center; gap: 15px; flex: 1; text-align: left; }
+        .file-icon { font-size: 24px; }
+        .file-name { font-weight: 500; max-width: 250px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+        .status-container { flex: 1; margin: 0 20px; display: flex; flex-direction: column; align-items: flex-end; }
+        .progress-bar { width: 100%; height: 6px; background: #eee; border-radius: 3px; overflow: hidden; margin-top: 5px; }
+        .progress-fill { height: 100%; background: var(--primary); width: 0%; transition: width 0.4s ease; }
+
+        .stats-text { font-size: 0.85rem; color: #666; }
+
+        .success-text { color: var(--primary); font-weight: bold; font-size: 0.9rem; display: flex; align-items: center; gap: 5px; }
+        .format-badge { background: #dfe6e9; padding: 2px 6px; border-radius: 4px; font-size: 0.75rem; color: #2d3436; text-transform: uppercase; }
+
+        .error-text { color: var(--danger); font-size: 0.9rem; }
+
+        /* Buttons */
+        .btn-download {
+            background: var(--primary); color: white; text-decoration: none;
+            padding: 8px 16px; border-radius: 6px; font-size: 0.9rem;
+            transition: background 0.2s; border: none; cursor: pointer;
+        }
+        .btn-download:hover { background: var(--primary-hover); }
+
+        #download-all-container { margin-top: 20px; display: none; }
+        .btn-large { padding: 12px 24px; font-size: 1rem; background: #2d3436; }
+        .btn-large:hover { background: #444; }
+
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <div class="header-row">
+        <h1>MightyMax</h1>
+        <button class="btn-exit" id="btn-exit" title="Остановить сервер и закрыть">Выход</button>
+    </div>
+    <p class="subtitle">Локальное сжатие и конвертация (HEIC, PNG, JPG, WEBP)</p>
+
+    <div class="settings-zone">
+        <div class="settings-row">
+            <div class="control-group">
+                <label for="format-select">Формат на выходе</label>
+                <select id="format-select">
+                    <option value="original" selected>Не менять (Оригинал)</option>
+                    <option value="jpeg">JPEG (Фото, без прозрачности)</option>
+                    <option value="png">PNG (Графика, прозрачность)</option>
+                    <option value="webp">WebP (Современный Web)</option>
+                </select>
+            </div>
+
+            <div class="control-group">
+                <label for="quality">Качество / Сжатие</label>
+                <div class="range-container">
+                    <input type="range" id="quality" min="10" max="100" value="80" oninput="updateQualityLabel(this.value)">
+                    <span class="quality-val" id="quality-val">80%</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="drop-zone" id="drop-zone">
+        <div class="drop-zone-text">📂 Перетащите фото сюда</div>
+        <input type="file" id="file-input" multiple accept="image/png, image/jpeg, image/webp, .heic, .heif">
+    </div>
+
+    <ul class="file-list" id="file-list"></ul>
+
+    <div id="download-all-container">
+        <button class="btn-download btn-large" id="btn-download-all">Скачать всё (ZIP)</button>
+    </div>
+</div>
+
+<script>
+    const dropZone = document.getElementById('drop-zone');
+    const fileInput = document.getElementById('file-input');
+    const fileList = document.getElementById('file-list');
+    const downloadAllContainer = document.getElementById('download-all-container');
+    const btnDownloadAll = document.getElementById('btn-download-all');
+    const qualityInput = document.getElementById('quality');
+    const formatSelect = document.getElementById('format-select');
+    const btnExit = document.getElementById('btn-exit');
+
+    let processedFilesData = [];
+
+    // --- Helpers ---
+    function updateQualityLabel(val) {
+        document.getElementById('quality-val').textContent = val + "%";
+    }
+
+    function formatBytes(bytes, decimals = 2) {
+        if (bytes === 0) return '0 Bytes';
+        const k = 1024;
+        const dm = decimals < 0 ? 0 : decimals;
+        const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+        const i = Math.floor(Math.log(bytes) / Math.log(k));
+        return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + ' ' + sizes[i];
+    }
+
+    function generateId(filename, index) {
+        return `item-${filename.replace(/\W/g, '')}-${index}`;
+    }
+
+    // --- Drag & Drop Events ---
+    ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+        dropZone.addEventListener(eventName, (e) => {
+            e.preventDefault(); e.stopPropagation();
+        }, false);
+    });
+
+    ['dragenter', 'dragover'].forEach(eventName => {
+        dropZone.addEventListener(eventName, () => dropZone.classList.add('dragover'), false);
+    });
+
+    ['dragleave', 'drop'].forEach(eventName => {
+        dropZone.addEventListener(eventName, () => dropZone.classList.remove('dragover'), false);
+    });
+
+    dropZone.addEventListener('drop', handleDrop, false);
+    fileInput.addEventListener('change', handleFiles, false);
+
+    function handleDrop(e) {
+        const dt = e.dataTransfer;
+        handleFiles({ target: { files: dt.files } });
+    }
+
+    function handleFiles(e) {
+        const files = [...e.target.files];
+        if (files.length === 0) return;
+        uploadFiles(files);
+        fileInput.value = '';
+    }
+
+    // --- Main Upload Logic ---
+    async function uploadFiles(files) {
+        const currentBatch = files.map((file, index) => {
+            const id = generateId(file.name, new Date().getTime() + index);
+            createFileItem(id, file);
+            return { id, file };
+        });
+
+        const formData = new FormData();
+        files.forEach(file => formData.append('files', file));
+
+        formData.append('quality', qualityInput.value);
+        formData.append('format', formatSelect.value);
+
+        try {
+            // Фейковый прогресс перед отправкой
+            currentBatch.forEach(item => updateProgress(item.id, 40));
+
+            const response = await fetch('/compress/', {
+                method: 'POST',
+                body: formData
+            });
+
+            if (!response.ok) throw new Error(`Server error: ${response.status}`);
+
+            const results = await response.json();
+
+            // Сопоставление результатов
+            results.forEach(res => {
+                const match = currentBatch.find(item => item.file.name === res.original_name);
+                if (match) {
+                    const el = document.getElementById(match.id);
+                    if (res.status === 'success') {
+                        updateSuccess(el, res);
+                        processedFilesData.push({
+                            server_filename: res.server_filename,
+                            original_name: res.original_name,
+                            download_name: res.download_name
+                        });
+                    } else {
+                        updateError(el, res.error);
+                    }
+                }
+            });
+            checkDownloadAll();
+
+        } catch (error) {
+            console.error(error);
+            currentBatch.forEach(item => {
+                const el = document.getElementById(item.id);
+                // Если элемент есть, но еще не помечен как успешный или ошибочный
+                if (el && !el.querySelector('.success-text') && !el.querySelector('.error-text')) {
+                    updateError(el, "Ошибка соединения");
+                }
+            });
+        }
+    }
+
+    // --- UI Builders ---
+    function createFileItem(id, file) {
+        const li = document.createElement('li');
+        li.className = 'file-item';
+        li.id = id;
+        li.innerHTML = `
+            <div class="file-info">
+                <span class="file-icon">📄</span>
+                <span class="file-name" title="${file.name}">${file.name}</span>
+            </div>
+            <div class="status-container">
+                <div class="stats-text">Ожидание...</div>
+                <div class="progress-bar"><div class="progress-fill" style="width: 5%;"></div></div>
+            </div>
+        `;
+        fileList.prepend(li);
+    }
+
+    function updateProgress(id, percent) {
+        const el = document.getElementById(id);
+        if (!el) return;
+        const fill = el.querySelector('.progress-fill');
+        el.querySelector('.stats-text').textContent = "Обработка...";
+        if (fill) fill.style.width = `${percent}%`;
+    }
+
+    function updateSuccess(el, data) {
+        if (!el) return;
+        const statusContainer = el.querySelector('.status-container');
+
+        let colorStyle = "color: var(--primary)";
+        let text = `(-${data.compression_ratio}%)`;
+
+        // Логика отображения экономии/роста размера
+        if (!data.is_optimized && data.compression_ratio <= 0) {
+            colorStyle = "color: #7f8c8d";
+            text = "(Без изменений)";
+        } else if (data.compression_ratio < 0) {
+            // Если файл вырос (например PNG->JPEG 100%), показываем это
+            text = `(+${Math.abs(data.compression_ratio)}%)`;
+        }
+
+        // Получаем расширение итогового файла
+        const ext = data.download_name.split('.').pop().toUpperCase();
+
+        statusContainer.innerHTML = `
+            <div class="success-text">
+                <span class="format-badge">${ext}</span>
+                ${formatBytes(data.original_size)} → ${formatBytes(data.compressed_size)}
+                <span style="${colorStyle}">${text}</span>
+            </div>
+            <a href="${data.download_url}" class="btn-download" title="Скачать ${data.download_name}">Скачать</a>
+        `;
+    }
+
+    function updateError(el, msg) {
+        if (!el) return;
+        const statusContainer = el.querySelector('.status-container');
+        statusContainer.innerHTML = `<span class="error-text">Ошибка: ${msg.substring(0, 30)}...</span>`;
+    }
+
+    function checkDownloadAll() {
+        if (processedFilesData.length > 1) {
+            downloadAllContainer.style.display = 'block';
+        }
+    }
+
+    // --- Button Actions ---
+
+    // Скачать всё
+    btnDownloadAll.addEventListener('click', async () => {
+        if (processedFilesData.length === 0) return;
+        try {
+            btnDownloadAll.textContent = "Архивация...";
+            const response = await fetch('/create-zip/', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ files: processedFilesData })
+            });
+            const res = await response.json();
+
+            const link = document.createElement('a');
+            link.href = res.download_url;
+            link.download = "MightyMax_Files.zip";
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+
+            btnDownloadAll.textContent = "Скачать всё (ZIP)";
+        } catch (e) {
+            console.error(e);
+            btnDownloadAll.textContent = "Ошибка";
+        }
+    });
+
+    // Выход
+    btnExit.addEventListener('click', async () => {
+        if(confirm("Остановить сервер и закрыть приложение?")) {
+            try {
+                // Пытаемся отправить команду на выключение
+                await fetch('/shutdown', { method: 'POST' });
+            } catch (e) {
+                // Игнорируем ошибку сети, т.к. сервер умирает быстро
+            }
+
+            // Заменяем интерфейс на сообщение
+            document.body.innerHTML = `
+                <div style='display:flex;height:100vh;justify-content:center;align-items:center;flex-direction:column;text-align:center;'>
+                    <h2 style='color:#2d3436'>Сервер остановлен</h2>
+                    <p style='color:#636e72'>Теперь вы можете закрыть это окно.</p>
+                </div>
+            `;
+
+            // Пытаемся закрыть окно (работает только если скрипт открыл окно, но стоит попробовать)
+            setTimeout(() => window.close(), 1000);
+        }
+    });
+</script>
+
+</body>
+</html>
