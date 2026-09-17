@@ -31,7 +31,7 @@
             text-align: center;
         }
 
-        /* Header & Exit Button */
+        /* Header & Action Buttons */
         .header-row {
             display: flex;
             justify-content: space-between;
@@ -40,6 +40,23 @@
             margin-bottom: 10px;
         }
         h1 { margin: 0; color: #2d3436; font-size: 2.2rem; }
+        .header-actions {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .btn-clear {
+            background: #636e72;
+            color: white;
+            border: none;
+            padding: 8px 15px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.9rem;
+            transition: background 0.2s;
+            font-weight: 600;
+        }
+        .btn-clear:hover { background: #2d3436; }
         .btn-exit {
             background: var(--danger);
             color: white;
@@ -178,7 +195,10 @@
 <div class="container">
     <div class="header-row">
         <h1>MightyMax</h1>
-        <button class="btn-exit" id="btn-exit" title="Остановить сервер и закрыть">Выход</button>
+        <div class="header-actions">
+            <button class="btn-clear" id="btn-clear" title="Очистить список файлов">Очистить список</button>
+            <button class="btn-exit" id="btn-exit" title="Остановить сервер и закрыть">Выход</button>
+        </div>
     </div>
     <p class="subtitle">Локальное сжатие и конвертация (HEIC, PNG, JPG, WEBP)</p>
 
@@ -225,6 +245,7 @@
     const qualityInput = document.getElementById('quality');
     const formatSelect = document.getElementById('format-select');
     const btnExit = document.getElementById('btn-exit');
+    const btnClear = document.getElementById('btn-clear');
 
     let processedFilesData = [];
 
@@ -308,15 +329,17 @@
                 const match = currentBatch.find(item => item.file.name === res.original_name);
                 if (match) {
                     const el = document.getElementById(match.id);
-                    if (res.status === 'success') {
-                        updateSuccess(el, res);
-                        processedFilesData.push({
-                            server_filename: res.server_filename,
-                            original_name: res.original_name,
-                            download_name: res.download_name
-                        });
-                    } else {
-                        updateError(el, res.error);
+                    if (el) {
+                        if (res.status === 'success') {
+                            updateSuccess(el, res);
+                            processedFilesData.push({
+                                server_filename: res.server_filename,
+                                original_name: res.original_name,
+                                download_name: res.download_name
+                            });
+                        } else {
+                            updateError(el, res.error);
+                        }
                     }
                 }
             });
@@ -398,10 +421,29 @@
     function checkDownloadAll() {
         if (processedFilesData.length > 1) {
             downloadAllContainer.style.display = 'block';
+        } else {
+            downloadAllContainer.style.display = 'none';
         }
     }
 
     // --- Button Actions ---
+
+    // Очистить список
+    btnClear.addEventListener('click', () => {
+        if (processedFilesData.length > 0) {
+            try {
+                fetch('/clear', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ files: processedFilesData })
+                }).catch(() => {});
+            } catch (e) {}
+        }
+        fileList.innerHTML = '';
+        processedFilesData = [];
+        fileInput.value = '';
+        downloadAllContainer.style.display = 'none';
+    });
 
     // Скачать всё
     btnDownloadAll.addEventListener('click', async () => {

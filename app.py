@@ -228,6 +228,21 @@ async def download_file(filename: str, name: str = None):
     raise HTTPException(status_code=404, detail="File not found")
 
 
+@app.post("/clear")
+async def clear_files(payload: dict = None):
+    if payload and "files" in payload:
+        for item in payload.get("files", []):
+            server_fname = item.get("server_filename")
+            if server_fname:
+                fpath = os.path.join(PROCESSED_DIR, server_fname)
+                if os.path.exists(fpath):
+                    try:
+                        os.remove(fpath)
+                    except Exception:
+                        pass
+    return {"status": "cleared"}
+
+
 @app.post("/create-zip/")
 async def create_zip(payload: dict):
     files_list = payload.get("files", [])
