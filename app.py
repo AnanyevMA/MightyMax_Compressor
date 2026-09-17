@@ -6,24 +6,21 @@ import uuid
 import asyncio
 import zipfile
 import threading
-import webbrowser
 import socket
 import signal
 from typing import List
 from contextlib import asynccontextmanager
-
-# --- HEIC SUPPORT ---
-from pillow_heif import register_heif_opener
-
-register_heif_opener()
+from urllib.parse import quote
 
 from fastapi import FastAPI, UploadFile, File, Form, HTTPException
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from PIL import Image, ImageOps
 
+from core.compressor import compress_image_logic
+from core.window import launch_app_window
+
 # --- FIX FOR PYINSTALLER --NOCONSOLE ---
-# Критически важно для работы без черного окна!
 if sys.stdout is None:
     sys.stdout = open(os.devnull, "w")
 if sys.stderr is None:
@@ -32,7 +29,7 @@ if sys.stderr is None:
 
 # --- PYINSTALLER PATH FIX ---
 def resource_path(relative_path):
-    """ Get absolute path to resource, works for dev and for PyInstaller """
+    """Get absolute path to resource, works for dev and for PyInstaller."""
     try:
         base_path = sys._MEIPASS
     except Exception:
@@ -67,9 +64,9 @@ async def cleanup_old_files():
                             if now - os.path.getmtime(file_path) > DELETE_AFTER_SECONDS:
                                 try:
                                     os.remove(file_path)
-                                except:
+                                except Exception:
                                     pass
-        except:
+        except Exception:
             pass
         await asyncio.sleep(600)
 
@@ -86,64 +83,13 @@ app = FastAPI(lifespan=lifespan)
 app.mount("/static", StaticFiles(directory=resource_path("static")), name="static")
 
 
-# --- CORE LOGIC ---
+# --- HELPERS ---
 def get_unique_filename(filename: str):
-    if not filename: filename = "image.jpg"
+    if not filename:
+        filename = "image.jpg"
     name, ext = os.path.splitext(filename)
     ext = ext.lower() if ext else ""
     return f"{uuid.uuid4().hex}", name, ext
-
-
-def compress_image_logic(input_path: str, output_base_path: str, original_ext: str, quality: int, target_format: str):
-    if target_format == 'jpeg':
-        final_ext = '.jpg'
-    elif target_format == 'png':
-        final_ext = '.png'
-    elif target_format == 'webp':
-        final_ext = '.webp'
-    else:
-        if original_ext in ['.heic', '.heif']:
-            final_ext = '.jpg'
-        else:
-            final_ext = original_ext
-
-    final_output_path = output_base_path + final_ext
-
-    with Image.open(input_path) as img:
-        img = ImageOps.exif_transpose(img)
-        if final_ext in ['.jpg', '.jpeg']:
-            if img.mode in ('RGBA', 'LA') or (img.mode == 'P' and 'transparency' in img.info):
-                background = Image.new('RGB', img.size, (255, 255, 255))
-                if img.mode == 'P': img = img.convert('RGBA')
-                background.paste(img, mask=img.split()[3])
-                img = background
-            elif img.mode != 'RGB':
-                img = img.convert('RGB')
-
-        if final_ext in ['.jpg', '.jpeg']:
-            img.save(final_output_path, "JPEG", quality=quality, optimize=True, progressive=True, subsampling=0)
-        elif final_ext == '.png':
-            if quality < 100:
-                if quality >= 90:
-                    n_colors = 256
-                elif quality >= 70:
-                    n_colors = 128
-                elif quality >= 50:
-                    n_colors = 64
-                else:
-                    n_colors = 32
-                if img.mode != 'P':
-                    if img.mode != 'RGBA': img = img.convert('RGBA')
-                    try:
-                        dither = Image.Dither.FLOYDSTEINBERG if quality < 80 else Image.Dither.NONE
-                        img = img.quantize(colors=n_colors, method=Image.Quantize.MAXCOVERAGE, dither=dither)
-                    except:
-                        pass
-            img.save(final_output_path, "PNG", optimize=True, compress_level=9)
-        elif final_ext == '.webp':
-            img.save(final_output_path, "WEBP", quality=quality, method=6)
-
-    return os.path.basename(final_output_path), final_ext
 
 
 # --- ENDPOINTS ---
@@ -165,9 +111,11 @@ async def shutdown_server():
 
 @app.post("/compress/")
 async def compress_files(
-        files: List[UploadFile] = File(...),
-        quality: int = Form(80),
-        format: str = Form("original")
+    files: List[UploadFile] = File(...),
+    quality: int = Form(80),
+    format: str = Form("original"),
+    scale: str = Form("original"),
+    lossless: bool = Form(False)
 ):
     results = []
     quality = max(1, min(100, quality))
@@ -183,23 +131,49 @@ async def compress_files(
                 shutil.copyfileobj(file.file, buffer)
             original_size = os.path.getsize(input_path)
 
+            # For HEIC/HEIF files, generate a full-quality JPEG original preview so browsers can display it in comparison slider
+            original_preview_url = None
+            if original_ext in ['.heic', '.heif']:
+                try:
+                    heic_preview_name = f"orig_{unique_id}.jpg"
+                    heic_preview_path = os.path.join(PROCESSED_DIR, heic_preview_name)
+                    with Image.open(input_path) as h_img:
+                        h_img = ImageOps.exif_transpose(h_img)
+                        if h_img.mode != 'RGB':
+                            h_img = h_img.convert('RGB')
+                        h_img.save(heic_preview_path, "JPEG", quality=95)
+                    original_preview_url = f"/download/{heic_preview_name}"
+                except Exception:
+                    pass
+
             final_filename, final_ext = await asyncio.to_thread(
-                compress_image_logic, input_path, output_base_path, original_ext, quality, format
+                compress_image_logic,
+                input_path,
+                output_base_path,
+                original_ext,
+                quality,
+                format,
+                scale,
+                lossless
             )
 
             final_output_path = os.path.join(PROCESSED_DIR, final_filename)
             compressed_size = os.path.getsize(final_output_path)
 
             is_optimized = True
-            is_format_changed = (format != 'original') or (original_ext in ['.heic', '.heif'])
-            if not is_format_changed and compressed_size >= original_size:
+            is_format_or_scale_changed = (
+                (format != 'original') or
+                (scale != 'original') or
+                (original_ext in ['.heic', '.heif'])
+            )
+
+            if not is_format_or_scale_changed and compressed_size >= original_size and not lossless:
                 shutil.copy2(input_path, final_output_path)
                 compressed_size = original_size
                 is_optimized = False
 
             ratio = ((original_size - compressed_size) / original_size) * 100 if original_size > 0 else 0
             download_name = f"{original_name_no_ext}{final_ext}"
-            from urllib.parse import quote
             safe_dl_name = quote(download_name)
 
             results.append({
@@ -211,10 +185,16 @@ async def compress_files(
                 "compressed_size": compressed_size,
                 "compression_ratio": round(ratio, 1),
                 "is_optimized": is_optimized,
-                "download_url": f"/download/{final_filename}?name={safe_dl_name}"
+                "download_url": f"/download/{final_filename}?name={safe_dl_name}",
+                "original_preview_url": original_preview_url
             })
             os.remove(input_path)
         except Exception as e:
+            if os.path.exists(input_path):
+                try:
+                    os.remove(input_path)
+                except Exception:
+                    pass
             results.append({"status": "error", "original_name": original_filename, "error": str(e)})
 
     return JSONResponse(content=results)
@@ -240,13 +220,24 @@ async def clear_files(payload: dict = None):
                         os.remove(fpath)
                     except Exception:
                         pass
+            # Also clean up any orig_ preview files if present
+            orig_preview = item.get("original_preview_url")
+            if orig_preview and orig_preview.startswith("/download/"):
+                orig_fname = orig_preview.replace("/download/", "").split("?")[0]
+                orig_path = os.path.join(PROCESSED_DIR, orig_fname)
+                if os.path.exists(orig_path):
+                    try:
+                        os.remove(orig_path)
+                    except Exception:
+                        pass
     return {"status": "cleared"}
 
 
 @app.post("/create-zip/")
 async def create_zip(payload: dict):
     files_list = payload.get("files", [])
-    if not files_list: raise HTTPException(status_code=400, detail="No files")
+    if not files_list:
+        raise HTTPException(status_code=400, detail="No files")
     zip_name = f"mightymax_{uuid.uuid4().hex[:8]}.zip"
     zip_path = os.path.join(PROCESSED_DIR, zip_name)
     used_names = {}
@@ -282,14 +273,21 @@ if __name__ == "__main__":
     import uvicorn
 
     PORT = find_free_port()
+    URL = f"http://127.0.0.1:{PORT}"
 
+    # Run uvicorn in background daemon thread
+    server_thread = threading.Thread(
+        target=lambda: uvicorn.run(app, host="127.0.0.1", port=PORT, log_config=None),
+        daemon=True
+    )
+    server_thread.start()
 
-    def open_browser():
-        time.sleep(1)
-        webbrowser.open(f"http://127.0.0.1:{PORT}")
+    # Launch desktop window on macOS/Windows with automatic fallback to browser
+    launch_app_window(URL, title="MightyMax Compressor", width=950, height=750)
 
-
-    threading.Thread(target=open_browser, daemon=True).start()
-
-    # ВАЖНО: log_config=None предотвращает ошибку при отсутствии консоли
-    uvicorn.run(app, host="127.0.0.1", port=PORT, log_config=None)
+    # If launch_app_window falls back to browser, keep server running
+    try:
+        while server_thread.is_alive():
+            time.sleep(1)
+    except KeyboardInterrupt:
+        pass

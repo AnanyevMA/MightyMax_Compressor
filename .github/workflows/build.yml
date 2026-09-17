@@ -7,7 +7,7 @@ on:
 
 jobs:
   build-mac:
-    runs-on: macos-latest  # Используем виртуальную машину Apple
+    runs-on: macos-latest
 
     steps:
     - uses: actions/checkout@v4
@@ -21,20 +21,22 @@ jobs:
       run: |
         python -m pip install --upgrade pip
         pip install -r requirements.txt
-        pip install pyinstaller
+        pip install pyinstaller pyobjc-framework-WebKit
 
     - name: Build with PyInstaller
-      # Обрати внимание: разделитель двоеточие (:) для Mac
       run: |
-        pyinstaller --noconsole --name="MightyMax" --add-data "static:static" app.py
+        pyinstaller --noconsole --name="MightyMax" \
+          --add-data "static:static" \
+          --collect-submodules webview \
+          --collect-all pillow_avif \
+          app.py
 
-    # Этот шаг убирает атрибуты карантина, чтобы приложение запускалось
-    # (хотя на чужом Маке всё равно придется разрешать запуск через настройки)
+    # Снятие атрибутов карантина
     - name: Sign/De-quarantine (Basic)
       run: |
         xattr -cr dist/MightyMax.app || true
 
-    # Упаковываем .app в .zip, иначе при скачивании он сломается
+    # Упаковываем .app в .zip
     - name: Zip the App
       run: |
         cd dist

@@ -1,0 +1,1 @@
+# MightyMax Core Module
